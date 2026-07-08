@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -11,7 +12,57 @@ const SAMPLE_SKILLS = [
   { name: 'Design System', value: 65 },
 ];
 
+const DURATION_MS = 1200;
+const STAGGER_MS = 150;
+
+function easeOutCubic(t) {
+  return 1 - (1 - t) ** 3;
+}
+
 function SkillTreeSection() {
+  const containerRef = useRef(null);
+  const [hasEntered, setHasEntered] = useState(false);
+  const [progress, setProgress] = useState(() => SAMPLE_SKILLS.map(() => 0));
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setHasEntered(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!hasEntered) return undefined;
+
+    const startTime = performance.now();
+    let frameId;
+
+    const tick = (now) => {
+      const next = SAMPLE_SKILLS.map((skill, i) => {
+        const elapsed = now - startTime - i * STAGGER_MS;
+        const t = Math.min(Math.max(elapsed / DURATION_MS, 0), 1);
+        return Math.round(skill.value * easeOutCubic(t));
+      });
+      setProgress(next);
+
+      const isDone = next.every((v, i) => v >= SAMPLE_SKILLS[i].value);
+      if (!isDone) frameId = requestAnimationFrame(tick);
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [hasEntered]);
+
   return (
     <SectionWrapper id="skill-tree">
       <Typography
@@ -36,18 +87,29 @@ function SkillTreeSection() {
             기술 스택을 트리나 프로그레스바로 시각화할 예정입니다.
           </Typography>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, textAlign: 'left' }}>
-            {SAMPLE_SKILLS.map((skill) => (
+          <Box
+            ref={containerRef}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, textAlign: 'left' }}
+          >
+            {SAMPLE_SKILLS.map((skill, i) => (
               <Box key={skill.name}>
-                <Typography
-                  variant="body2"
-                  sx={{ color: 'var(--color-text-primary)', mb: 0.5, fontWeight: 600 }}
-                >
-                  {skill.name}
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: 'var(--color-text-primary)', fontWeight: 600 }}
+                  >
+                    {skill.name}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: 'var(--color-primary)', fontWeight: 700 }}
+                  >
+                    {progress[i]}%
+                  </Typography>
+                </Box>
                 <LinearProgress
                   variant="determinate"
-                  value={skill.value}
+                  value={progress[i]}
                   sx={{
                     height: 8,
                     borderRadius: 4,
@@ -55,6 +117,7 @@ function SkillTreeSection() {
                     '& .MuiLinearProgress-bar': {
                       bgcolor: 'var(--color-primary)',
                       borderRadius: 4,
+                      transition: 'none',
                     },
                   }}
                 />
